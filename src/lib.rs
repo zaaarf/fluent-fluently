@@ -8,8 +8,8 @@ pub mod error;
 
 type TypedFluentBundle = FluentBundle<Arc<FluentResource>, IntlLangMemoizer>;
 pub struct Localiser {
-	bundles: HashMap<LanguageIdentifier, TypedFluentBundle>,
-	default_language: LanguageIdentifier
+	pub bundles: HashMap<LanguageIdentifier, TypedFluentBundle>,
+	pub default_language: LanguageIdentifier
 }
 
 impl Localiser {
