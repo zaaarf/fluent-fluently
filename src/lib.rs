@@ -1,18 +1,29 @@
 use std::{collections::HashMap, sync::Arc};
-use fluent::{bundle::FluentBundle, FluentResource};
+use fluent::{bundle::FluentBundle, FluentResource, FluentMessage};
 use intl_memoizer::concurrent::IntlLangMemoizer;
 use unic_langid::LanguageIdentifier;
 use crate::error::Result;
 
 pub mod error;
 
+/// Shorthand type handling the [FluentBundle]'s generic types.
 type TypedFluentBundle = FluentBundle<Arc<FluentResource>, IntlLangMemoizer>;
+
+/// The main struct of the program.
+/// You can obtain a new instance by calling [Self::try_load()].
 pub struct Localiser {
 	pub bundles: HashMap<LanguageIdentifier, TypedFluentBundle>,
 	pub default_language: LanguageIdentifier
 }
 
 impl Localiser {
+	/// Tries to create a new [Localiser] instance given a path and the name of the default language.
+	/// The path's direct children will only be considered if their names are valid language codes as
+	/// defined by [LanguageIdentifier], and if they are either files with the `.ftl` extension or
+	/// directories. In the first case they will be read directly and converted in [FluentResource]s,
+	/// in the second case the same will be done to their chilren instead.
+	/// [FluentResource]s within a same folder will be considered part of a same [FluentBundle],
+	/// forming a single localisation for all intents and purposes.
 	pub fn try_load(path: String, default_language: String) -> Result<Self> {
 		let mut bundles = HashMap::new();
 		let paths = std::fs::read_dir(path)?
@@ -26,7 +37,6 @@ impl Localiser {
 				}
 			}).collect::<Vec<_>>();
 
-		//TODO load default first and call bundle.add_resource_overriding(default_bundle) on others
 		let default_language = default_language.parse::<LanguageIdentifier>()?;
 
 		for path in paths {
@@ -63,17 +73,44 @@ impl Localiser {
 		})
 	}
 
+	/// Reads all files in a certain folder and all of its subfolders that have the `.ftl`
+	/// extension, parses them into [FluentResource]s and returns them in a [Vec]. 
 	fn path_to_resources(path: &std::path::PathBuf) -> Result<Vec<Arc<FluentResource>>> {
 		let mut res = Vec::new();
 		for entry in walkdir::WalkDir::new(path).follow_links(true).into_iter().filter_map(|e| e.ok()) {
 			let entry_path = entry.path().to_path_buf();
+			let entry_extension = entry_path.extension();
+			if entry_extension.is_none() || entry_extension.unwrap() != "ftl" {
+				continue;
+			}
+
 			res.push(Self::file_to_resource(&entry_path)?);
 		}
 		Ok(res)
 	}
 
+	/// Reads the file at the given path, and tries to parse it into a [FluentResource].
 	fn file_to_resource(path: &std::path::PathBuf) -> Result<Arc<FluentResource>> {
-		let content = std::fs::read_to_string(path)?;
-		Ok(Arc::new(FluentResource::try_new(content)?))
+		Ok(Arc::new(FluentResource::try_new(std::fs::read_to_string(path)?)?))
+	}
+
+	/// Extracts a message from the requested bundle, or from the default one if absent. 
+	pub fn get_message(&self, key: String, language: LanguageIdentifier) -> Result<FluentMessage> {
+		let bundle = self.bundles.get(&language)
+			.or_else(|| self.bundles.get(&self.default_language))
+			.ok_or(error::Error::GenericError("Failed to get default bundle! This is not supposed to happen!".to_string()))?;
+
+		bundle.get_message(&key)
+			.ok_or(error::Error::MissingMessageError(format!("No such message {} for language {}!", key, language)))
+	}
+
+	/// Returns a [HashMap] tying each [LanguageIdentifier] to its [String] equivalent, to simplify retrieval.
+	/// Call this as little as possible, as it's rather unoptimised and may scale poorly.
+	pub fn available_languages(&self) -> HashMap<String, LanguageIdentifier> {
+		let mut res = HashMap::new();
+		for lang in self.bundles.keys() {
+			res.insert(lang.to_string(), lang.clone());
+		}
+		res
 	}
 }

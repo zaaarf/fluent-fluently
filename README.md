@@ -1,2 +1,4 @@
 # Fluent, fluently
-I found myself needing to do localisation, one time. I decided I'd want it to happen at runtime, so that any spelling fixes may be applied without needing to recompile the whole program. [Fluent](https://github.com/projectfluent/fluent-rs) provides an API, but no real way to use it. I couldn't find any existing implementation fitting my use case, so I wrote this.
+A small Rust library handling loading runtime loading of [Fluent](https://github.com/projectfluent/fluent-rs) localisation. By design, Fluent does not touch the IO part, only providing String parsing. This library takes care of that.
+
+I intentionally kept this as simple as possible to reflect my very basic use case. Check out [fluent-localization](https://github.com/AEnterprise/fluent-localization) for something with more features, namely compile-time validation and localisation struct generation for easier access.

@@ -4,11 +4,14 @@ use fluent::FluentResource;
 
 pub type Result<T> = StdResult<T, Error>;
 
+/// Simple wrapper around the errors that may occur during the program's execution.
 #[derive(Debug)]
 pub enum Error {
+	GenericError(String),
 	IoError(std::io::Error),
 	LanguageIdentifierError(unic_langid::LanguageIdentifierError),
-	FluentError(Vec<fluent::FluentError>)
+	FluentError(Vec<fluent::FluentError>),
+	MissingMessageError(String)
 }
 
 impl From<std::io::Error> for Error {
