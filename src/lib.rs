@@ -1,3 +1,18 @@
+//! # Fluent, fluently
+//! A simple library providing IO for [Project Fluent](https://projectfluent.org/).
+//!
+//! Sample usage:
+//!
+//! ```rust
+//! let loc = fluent_fluently::Localiser::try_load("./locale".to_string(), "en-US".to_string()).unwrap();
+//! let msg = loc.get_message("hello-world", loc.available_languages.get("it"));
+//! println!("{}", msg);
+//! ```
+//!
+//! The [FluentMessage] you obtained this way will automatically fall back on `en-US` if no locale
+//! of the requested type was found. Though, if you want, you `bundles` is a [HashMap], so you can
+//! certainly check whether a language is available manually if you so wish.
+
 use std::{collections::HashMap, sync::Arc};
 use fluent::{bundle::FluentBundle, FluentResource, FluentMessage};
 use intl_memoizer::concurrent::IntlLangMemoizer;
@@ -10,10 +25,14 @@ pub mod error;
 type TypedFluentBundle = FluentBundle<Arc<FluentResource>, IntlLangMemoizer>;
 
 /// The main struct of the program.
-/// You can obtain a new instance by calling [Self::try_load()].
+/// You can obtain a new instance by calling [`Self::try_load()`].
 pub struct Localiser {
-	pub bundles: HashMap<LanguageIdentifier, TypedFluentBundle>,
-	pub default_language: LanguageIdentifier
+	/// A [HashMap] tying each bundle to its language identifier.
+	pub bundles: HashMap<String, TypedFluentBundle>,
+	/// A [HashMap] tying each *available* language identifier [String] to an actual [LanguageIdentifier].
+	pub available_languages: HashMap<String, LanguageIdentifier>,
+	/// The identifier of the default language.
+	pub default_language: String
 }
 
 impl Localiser {
@@ -26,6 +45,7 @@ impl Localiser {
 	/// forming a single localisation for all intents and purposes.
 	pub fn try_load(path: String, default_language: String) -> Result<Self> {
 		let mut bundles = HashMap::new();
+		let mut available_languages = HashMap::new();
 		let paths = std::fs::read_dir(path)?
 			.filter_map(|res| res.ok())
 			.map(|dir_entry| dir_entry.path())
@@ -37,7 +57,8 @@ impl Localiser {
 				}
 			}).collect::<Vec<_>>();
 
-		let default_language = default_language.parse::<LanguageIdentifier>()?;
+		// validate default
+		let default_language = default_language.parse::<LanguageIdentifier>()?.to_string();
 
 		for path in paths {
 			// validate filename as language code
@@ -64,11 +85,13 @@ impl Localiser {
 				bundle.add_resource(Self::file_to_resource(&path)?)?;
 			}
 
-			bundles.insert(language_code, bundle);
+			bundles.insert(language_code.to_string(), bundle);
+			available_languages.insert(language_code.to_string(), language_code);
 		}
 
 		Ok(Self {
 			bundles,
+			available_languages,
 			default_language
 		})
 	}
@@ -95,22 +118,11 @@ impl Localiser {
 	}
 
 	/// Extracts a message from the requested bundle, or from the default one if absent. 
-	pub fn get_message(&self, key: String, language: LanguageIdentifier) -> Result<FluentMessage> {
-		let bundle = self.bundles.get(&language)
+	pub fn get_message(&self, key: String, language: String) -> Result<FluentMessage> {
+		self.bundles.get(&language)
 			.or_else(|| self.bundles.get(&self.default_language))
-			.ok_or(error::Error::GenericError("Failed to get default bundle! This is not supposed to happen!".to_string()))?;
-
-		bundle.get_message(&key)
+			.ok_or(error::Error::GenericError("Failed to get default bundle! This is not supposed to happen!".to_string()))?
+			.get_message(&key)
 			.ok_or(error::Error::MissingMessageError(format!("No such message {} for language {}!", key, language)))
-	}
-
-	/// Returns a [HashMap] tying each [LanguageIdentifier] to its [String] equivalent, to simplify retrieval.
-	/// Call this as little as possible, as it's rather unoptimised and may scale poorly.
-	pub fn available_languages(&self) -> HashMap<String, LanguageIdentifier> {
-		let mut res = HashMap::new();
-		for lang in self.bundles.keys() {
-			res.insert(lang.to_string(), lang.clone());
-		}
-		res
 	}
 }
