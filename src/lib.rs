@@ -14,7 +14,7 @@
 //! certainly check whether a language is available manually if you so wish.
 
 use std::{collections::HashMap, sync::Arc};
-use fluent::{bundle::FluentBundle, FluentResource, FluentMessage};
+use fluent::{bundle::FluentBundle, FluentResource, FluentArgs};
 use intl_memoizer::concurrent::IntlLangMemoizer;
 use unic_langid::LanguageIdentifier;
 use crate::error::Result;
@@ -118,11 +118,21 @@ impl Localiser {
 	}
 
 	/// Extracts a message from the requested bundle, or from the default one if absent. 
-	pub fn get_message(&self, key: String, language: String) -> Result<FluentMessage> {
-		self.bundles.get(&language)
+	pub fn get_message(&self, key: &str, language: &str, args: Option<&FluentArgs>) -> Result<String> {
+		let bundle = self.bundles.get(language)
 			.or_else(|| self.bundles.get(&self.default_language))
-			.ok_or(error::Error::GenericError("Failed to get default bundle! This is not supposed to happen!".to_string()))?
-			.get_message(&key)
-			.ok_or(error::Error::MissingMessageError(format!("No such message {} for language {}!", key, language)))
+			.ok_or(error::Error::GenericError("Failed to get default bundle! This is not supposed to happen!".to_string()))?;
+
+		let pattern = bundle.get_message(key)
+			.and_then(|msg| msg.value())
+			.ok_or(error::Error::MissingMessageError(format!("No such message {} for language {}!", key, language)))?;
+
+		let mut err = Vec::new();
+		let res = bundle.format_pattern(pattern, args, &mut err);
+		if err.is_empty() {
+			Ok(res.to_string())
+		} else {
+			Err(error::Error::FluentError(err))
+		}
 	}
 }
