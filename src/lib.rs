@@ -43,7 +43,7 @@ impl Localiser {
 	/// in the second case the same will be done to their chilren instead.
 	/// [FluentResource]s within a same folder will be considered part of a same [FluentBundle],
 	/// forming a single localisation for all intents and purposes.
-	pub fn try_load(path: String, default_language: String) -> Result<Self> {
+	pub fn try_load(path: &str, default_language: &str) -> Result<Self> {
 		let mut bundles = HashMap::new();
 		let mut available_languages = HashMap::new();
 		let paths = std::fs::read_dir(path)?
